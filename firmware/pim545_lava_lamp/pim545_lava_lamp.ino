@@ -4,18 +4,36 @@
 #include "config.h"
 #include "lava_lamp.h"
 #include "pico_scroll.h"
+#include "ripple.h"
 
 enum Mode { MODE_LAVA, MODE_TEST, MODE_HOST };
 
 static PicoScroll scroll;
 static LavaLamp lamp;
+static Ripples ripples;
 static Mode mode = MODE_LAVA;
 static bool paused = false;
 static uint8_t brightness = DEFAULT_BRIGHTNESS;
 static uint8_t luma[LAMP_PIXELS];
 static uint32_t last_frame_ms = 0;
 static uint32_t last_host_ms = 0;
-static uint32_t last_btn_ms = 0;
+
+// Physical corners with A/B at the roof, X/Y at the ground.
+struct CornerBtn {
+  int pin;
+  float x;
+  float y;
+  const char *name;
+  bool was_pressed;
+  uint32_t last_edge_ms;
+};
+
+static CornerBtn corners[] = {
+    {PIN_BTN_B, 0.2f, 0.2f, "B", false, 0},
+    {PIN_BTN_A, (float)LAMP_WIDTH - 1.2f, 0.2f, "A", false, 0},
+    {PIN_BTN_Y, 0.2f, (float)LAMP_HEIGHT - 1.2f, "Y", false, 0},
+    {PIN_BTN_X, (float)LAMP_WIDTH - 1.2f, (float)LAMP_HEIGHT - 1.2f, "X", false, 0},
+};
 
 static const uint8_t PKT_MAGIC0 = 0x50;  // 'P'
 static const uint8_t PKT_MAGIC1 = 0x53;  // 'S'
@@ -44,18 +62,26 @@ static void print_help() {
   Serial.println();
   Serial.println(F("PIM545 lava lamp  7x17 white LEDs  IS31FL3731 @ 0x74"));
   Serial.printf("I2C  SDA=GPIO%d  SCL=GPIO%d  3.3V -> VSYS  GND -> GND\n", PIN_SDA, PIN_SCL);
-  Serial.println(F("buttons (optional, active-low):"));
-  Serial.printf("  A=GPIO%d pause   B=GPIO%d reseed   X=GPIO%d dim   Y=GPIO%d bright\n",
-                PIN_BTN_A, PIN_BTN_B, PIN_BTN_X, PIN_BTN_Y);
-  Serial.println(F("serial: t=test  l=lava  p=pause  s=reseed  +/-=brightness"));
+  Serial.println(F("buttons (optional, active-low): tap a corner to drop a pebble"));
+  Serial.printf("  B=GPIO%d top-left   A=GPIO%d top-right\n", PIN_BTN_B, PIN_BTN_A);
+  Serial.printf("  Y=GPIO%d bot-left   X=GPIO%d bot-right\n", PIN_BTN_Y, PIN_BTN_X);
+  Serial.println(F("serial: a/b/x/y pebble  t=test  l=lava  p=pause  s=reseed  +/-=brightness"));
   Serial.println(F("host frames: 0x50 0x53 0x07 0x11 + 119 luma bytes + xor"));
   Serial.println();
 }
 
 static void apply_luma() { scroll.fill_lamp(luma, LAMP_PIXELS, brightness); }
 
+static void drop_pebble(float x, float y, const char *name) {
+  mode = MODE_LAVA;
+  ripples.drop(x, y, 1.0f);
+  lamp.impulse(x, y, 2.8f);
+  Serial.printf("pebble %s (%.1f, %.1f)\n", name, x, y);
+}
+
 static void render_lava() {
   lamp.render_luma(luma);
+  ripples.apply(luma);
   apply_luma();
   scroll.show();
 }
@@ -89,7 +115,15 @@ static void handle_packet() {
 
 static void feed_serial_byte(uint8_t b) {
   if (pkt_n == 0 && b != PKT_MAGIC0) {
-    if (b == 't' || b == 'T') {
+    if (b == 'a' || b == 'A') {
+      drop_pebble(corners[1].x, corners[1].y, corners[1].name);
+    } else if (b == 'b' || b == 'B') {
+      drop_pebble(corners[0].x, corners[0].y, corners[0].name);
+    } else if (b == 'x' || b == 'X') {
+      drop_pebble(corners[3].x, corners[3].y, corners[3].name);
+    } else if (b == 'y' || b == 'Y') {
+      drop_pebble(corners[2].x, corners[2].y, corners[2].name);
+    } else if (b == 't' || b == 'T') {
       mode = MODE_TEST;
       Serial.println(F("test pattern"));
     } else if (b == 'l' || b == 'L') {
@@ -140,35 +174,19 @@ static bool pressed(int pin) { return digitalRead(pin) == LOW; }
 
 static void handle_buttons() {
   uint32_t now = millis();
-  if (now - last_btn_ms < 180) {
-    return;
-  }
-  if (pressed(PIN_BTN_A)) {
-    paused = !paused;
-    last_btn_ms = now;
-    Serial.println(paused ? F("paused") : F("running"));
-  } else if (pressed(PIN_BTN_B)) {
-    lamp.reseed(now);
-    mode = MODE_LAVA;
-    paused = false;
-    last_btn_ms = now;
-    Serial.println(F("reseed"));
-  } else if (pressed(PIN_BTN_X)) {
-    if (brightness > MIN_BRIGHTNESS + 8) {
-      brightness -= 8;
-    } else {
-      brightness = MIN_BRIGHTNESS;
+  for (CornerBtn &c : corners) {
+    bool down = pressed(c.pin);
+    if (down == c.was_pressed) {
+      continue;
     }
-    last_btn_ms = now;
-    Serial.printf("brightness %u\n", brightness);
-  } else if (pressed(PIN_BTN_Y)) {
-    if (brightness < MAX_BRIGHTNESS - 8) {
-      brightness += 8;
-    } else {
-      brightness = MAX_BRIGHTNESS;
+    if (now - c.last_edge_ms < 40) {
+      continue;
     }
-    last_btn_ms = now;
-    Serial.printf("brightness %u\n", brightness);
+    c.last_edge_ms = now;
+    c.was_pressed = down;
+    if (down) {
+      drop_pebble(c.x, c.y, c.name);
+    }
   }
 }
 
@@ -242,8 +260,10 @@ void loop() {
   if (mode == MODE_HOST) {
     return;
   }
+  const float dt = 1.0f / TARGET_FPS;
   if (!paused) {
-    lamp.step(1.0f / TARGET_FPS);
+    lamp.step(dt);
   }
+  ripples.step(dt, &lamp, !paused);
   render_lava();
 }

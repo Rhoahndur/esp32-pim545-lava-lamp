@@ -323,6 +323,37 @@ void LavaLamp::step(float dt) {
   t_ += dt;
 }
 
+void LavaLamp::impulse(float x, float y, float strength) {
+  for (Blob &b : blobs_) {
+    float dx = b.x - x;
+    float dy = b.y - y;
+    float dist = hypotf(dx, dy) + 0.18f;
+    float mag = strength / (dist * dist);
+    if (mag > 2.4f) {
+      mag = 2.4f;
+    }
+    b.vx += (dx / dist) * mag;
+    b.vy += (dy / dist) * mag;
+    b.temp = clampf(b.temp + 0.06f * mag, 0.0f, 1.0f);
+  }
+}
+
+void LavaLamp::wave_force(float ox, float oy, float front, float amp, float dt) {
+  for (Blob &b : blobs_) {
+    float dx = b.x - ox;
+    float dy = b.y - oy;
+    float r = hypotf(dx, dy);
+    if (r < 0.08f) {
+      continue;
+    }
+    float dr = r - front;
+    float ring = expf(-(dr * dr) / 0.65f);
+    float mag = amp * ring * dt * 7.5f;
+    b.vx += (dx / r) * mag;
+    b.vy += (dy / r) * mag;
+  }
+}
+
 void LavaLamp::render_rgb(uint8_t *rgb) const {
   const int n = (int)blobs_.size();
   float cr[8], cg[8], cb[8];
