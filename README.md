@@ -161,6 +161,17 @@ Same flags as before (`--fps`, `--seed`, `--preview`, `--dry-run`, `--base-url`)
 
 ![Building strip](assets/building/preview-strip.png)
 
+Simulator frame protocol:
+
+```
+POST {base}/api/i/{instance}/frame
+Content-Type: application/octet-stream
+Body: 459 bytes, row-major RGB, 17 rows × 9 columns, origin top-left (roof)
+Success: HTTP 204
+```
+
+This repo is the only tree to clone. The older `green-building-lava-lamp` GitHub repo is archived.
+
 ## How the blobs work
 
 Same knobs as the Green Building lamp. y increases downward; the ground floor is hot.
