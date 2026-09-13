@@ -5,7 +5,7 @@ One repo for both canvases:
 - **PIM545 pack** — 7×17 white LEDs on an ESP32 (`firmware/`, `lava_lamp.py`)
 - **Green Building sim** — 9×17 RGB windows (`building.py`)
 
-Tap a corner on the pack; the same pebble runs on the LEDs and, if `building.py --controller` is running, on the [simulator](https://sundai.willsarg.com).
+Tap a corner on the pack; the same button event runs on the LEDs and, if `building.py crisp-owl --controller` is running, on the [simulator](https://sundai.willsarg.com). The two simulations run independently; their blob positions are not synchronized.
 
 The pack is a [Pimoroni Pico Scroll Pack (PIM545)](https://shop.pimoroni.com/products/pico-scroll-pack). Hold it like a building, A/B at the roof. White LEDs show luminance; the sim is in color.
 
@@ -34,10 +34,10 @@ The Scroll Pack is a **Pico backpack**. It will not plug onto an ESP32. You poke
 | **3, 8, 18, or 38 GND** | Ground | **GND** | **GND** |
 | **6 SDA** | I2C data | **GPIO 21** | **GPIO 8** |
 | **7 SCL** | I2C clock | **GPIO 22** | **GPIO 9** |
-| 16 SW_A (optional) | Pebble, top-right | GPIO 32 | GPIO 4 (S3) / GPIO 2 (C3) |
-| 17 SW_B (optional) | Pebble, top-left | GPIO 33 | GPIO 5 (S3) / GPIO 3 (C3) |
-| 19 SW_X (optional) | Pebble, bottom-right | GPIO 25 | GPIO 6 (S3) / GPIO 4 (C3) |
-| 20 SW_Y (optional) | Pebble, bottom-left | GPIO 26 | GPIO 7 (S3) / GPIO 5 (C3) |
+| 16 SW_A (optional) | SW_A | GPIO 32 | GPIO 4 (S3) / GPIO 2 (C3) |
+| 17 SW_B (optional) | SW_B | GPIO 33 | GPIO 5 (S3) / GPIO 3 (C3) |
+| 19 SW_X (optional) | SW_X | GPIO 25 | GPIO 6 (S3) / GPIO 4 (C3) |
+| 20 SW_Y (optional) | SW_Y | GPIO 26 | GPIO 7 (S3) / GPIO 5 (C3) |
 
 The underside of the pack is silkscreened. Match the USB-end marking with “USB” on the drawing, then count:
 
@@ -61,7 +61,7 @@ ESP32 SDA  ----  PIM545 SDA  (6)
 ESP32 SCL  ----  PIM545 SCL  (7)
 ```
 
-USB-C from the Mac powers the ESP32; the ESP32’s 3.3 V regulator powers the matrix. 119 LEDs at the default brightness are within what a typical DevKit regulator will supply. If the ESP32 brown-outs, lower brightness (serial `-`).
+USB-C from the Mac powers the ESP32; the ESP32’s 3.3 V regulator powers the matrix. Available current depends on the specific board and other loads. If the ESP32 brown-outs, lower brightness (serial `-`) and check the supply.
 
 I2C is 400 kHz, address **0x74**. Extra pull-ups are usually unnecessary; if the bus is flaky add 4.7 kΩ from SDA and SCL to 3.3 V.
 
@@ -114,6 +114,11 @@ pio device monitor
 
 If the image is mirrored or rotated, change `SWAP_XY`, `FLIP_X`, and `FLIP_Y` at the bottom of `config.h` and reflash. Default is portrait, A/B at the roof.
 
+Current logical pebble coordinates are A=top-left, B=top-right, X=bottom-left,
+Y=bottom-right in both implementations. These differ from the physical labels
+in the drawing above; verify with the corner test before changing orientation.
+The boot test stays active until `l` is sent.
+
 ## Preview on the Mac (no hardware)
 
 Python 3.10+, no packages:
@@ -142,11 +147,24 @@ python3 lava_lamp.py --serial /dev/cu.usbserial-0001 --fps 20
 
 List ports with `ls /dev/cu.usb*`. Host frames win until USB goes quiet for 2.5 s, then the on-device lamp resumes.
 
+Use one serial client per port: close Serial Monitor before starting either Python
+client, and do not run `--serial` and `--controller` against the same port.
+Auto-detection refuses ambiguous ports; select a path explicitly. USB frame writes
+time out after two seconds and print a restart hint on failure.
+
 Packet (124 bytes): `0x50 0x53 0x07 0x11` + 119 luminance bytes (row-major, origin top-left) + XOR of the previous 123 bytes.
 
 ## Green Building sim (9×17 color)
 
-`building.py` is the old green-building-lava-lamp client, in this repo. It POSTs 459-byte RGB frames to the simulator. The pack keeps drawing locally; this process only listens for `PEBBLE A/B/X/Y` on USB.
+`building.py` POSTs 459-byte RGB frames to the simulator. No hardware or packages
+are needed for the lamp alone:
+
+```sh
+python3 building.py crisp-owl
+```
+
+Use an existing assigned instance name. With the optional controller, the pack
+keeps drawing locally while this process listens for `PEBBLE A/B/X/Y` on USB:
 
 ```sh
 python3 -m pip install pyserial
@@ -156,6 +174,11 @@ python3 building.py crisp-owl --controller
 Watch: https://sundai.willsarg.com/crisp-owl?view=close
 
 Same flags as before (`--fps`, `--seed`, `--preview`, `--dry-run`, `--base-url`). Pass `--controller /dev/cu.usbserial-0001` if auto-detect is wrong. Only one sender per instance.
+
+The controller retries a missing/disconnected port every two seconds while the
+building keeps animating. HTTP failures retry with backoff and stop after ten
+consecutive failures. Keep the sender awake and connected; Ctrl+C stops it.
+`--dry-run` generates locally; `--preview` with an instance still streams.
 
 ![Building still](assets/building/preview.png)
 
@@ -188,7 +211,9 @@ Same knobs as the Green Building lamp. y increases downward; the ground floor is
 | `Y_ASPECT` | 1.0 | Square pixels on this pack (the building used 0.85) |
 | `GAUSS_FALLOFF` | 2.5 | Soft metaball edges |
 
-`--fps` sets `dt = 1/fps`. `--seed 13 --fps 20` always produces the same Python frames.
+`--fps` sets `dt = 1/fps`. With the same client and no button input,
+`--seed 13 --fps 20` produces the same Python frames. Slow transport slows
+simulation time. Firmware and Python are similar models, not frame-identical.
 
 ## Troubleshooting
 
