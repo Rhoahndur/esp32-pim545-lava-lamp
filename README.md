@@ -31,10 +31,10 @@ The Scroll Pack is a **Pico backpack**. It will not plug onto an ESP32. You poke
 | **3, 8, 18, or 38 GND** | Ground | **GND** | **GND** |
 | **6 SDA** | I2C data | **GPIO 21** | **GPIO 8** |
 | **7 SCL** | I2C clock | **GPIO 22** | **GPIO 9** |
-| 16 SW_A (optional) | Pause | GPIO 32 | GPIO 4 (S3) / GPIO 2 (C3) |
-| 17 SW_B (optional) | New seed | GPIO 33 | GPIO 5 (S3) / GPIO 3 (C3) |
-| 19 SW_X (optional) | Dimmer | GPIO 25 | GPIO 6 (S3) / GPIO 4 (C3) |
-| 20 SW_Y (optional) | Brighter | GPIO 26 | GPIO 7 (S3) / GPIO 5 (C3) |
+| 16 SW_A (optional) | Pebble, top-right | GPIO 32 | GPIO 4 (S3) / GPIO 2 (C3) |
+| 17 SW_B (optional) | Pebble, top-left | GPIO 33 | GPIO 5 (S3) / GPIO 3 (C3) |
+| 19 SW_X (optional) | Pebble, bottom-right | GPIO 25 | GPIO 6 (S3) / GPIO 4 (C3) |
+| 20 SW_Y (optional) | Pebble, bottom-left | GPIO 26 | GPIO 7 (S3) / GPIO 5 (C3) |
 
 The underside of the pack is silkscreened. Match the USB-end marking with “USB” on the drawing, then count:
 
@@ -58,7 +58,7 @@ ESP32 SDA  ----  PIM545 SDA  (6)
 ESP32 SCL  ----  PIM545 SCL  (7)
 ```
 
-USB-C from the Mac powers the ESP32; the ESP32’s 3.3 V regulator powers the matrix. 119 LEDs at the default brightness are within what a typical DevKit regulator will supply. If the ESP32 brown-outs, lower brightness (serial `-` or button X).
+USB-C from the Mac powers the ESP32; the ESP32’s 3.3 V regulator powers the matrix. 119 LEDs at the default brightness are within what a typical DevKit regulator will supply. If the ESP32 brown-outs, lower brightness (serial `-`).
 
 I2C is 400 kHz, address **0x74**. Extra pull-ups are usually unnecessary; if the bus is flaky add 4.7 kΩ from SDA and SCL to 3.3 V.
 
@@ -100,16 +100,14 @@ pio device monitor
 
 | Control | Action |
 | --- | --- |
+| `a` `b` `x` `y` | Drop a pebble at that corner |
 | `t` | Test pattern |
 | `l` | Lava lamp |
 | `p` | Pause / resume |
 | `s` | New random seed |
 | `+` / `-` | Brightness |
 | `?` | Print help |
-| Button A | Pause |
-| Button B | New seed |
-| Button X | Dimmer |
-| Button Y | Brighter |
+| Button A / B / X / Y | Pebble from that corner (ring + shove into the blobs) |
 
 If the image is mirrored or rotated, change `SWAP_XY`, `FLIP_X`, and `FLIP_Y` at the bottom of `config.h` and reflash. Default is portrait, A/B at the roof.
 
