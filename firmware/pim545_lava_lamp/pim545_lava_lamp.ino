@@ -75,7 +75,7 @@ static void apply_luma() { scroll.fill_lamp(luma, LAMP_PIXELS, brightness); }
 static void drop_pebble(float x, float y, const char *name) {
   mode = MODE_LAVA;
   ripples.drop(x, y, 1.0f);
-  lamp.impulse(x, y, 2.8f);
+  lamp.impulse(x, y, 1.05f);
   Serial.printf("pebble %s (%.1f, %.1f)\n", name, x, y);
 }
 

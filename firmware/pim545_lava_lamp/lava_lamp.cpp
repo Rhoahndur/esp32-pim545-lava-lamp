@@ -3,6 +3,8 @@
 #include <math.h>
 #include <algorithm>
 
+#include "ripple.h"
+
 namespace {
 
 const int START_BLOBS = 6;
@@ -338,7 +340,7 @@ void LavaLamp::impulse(float x, float y, float strength) {
   }
 }
 
-void LavaLamp::wave_force(float ox, float oy, float front, float amp, float dt) {
+void LavaLamp::wave_force(float ox, float oy, float t, float amp, float dt) {
   for (Blob &b : blobs_) {
     float dx = b.x - ox;
     float dy = b.y - oy;
@@ -346,9 +348,10 @@ void LavaLamp::wave_force(float ox, float oy, float front, float amp, float dt) 
     if (r < 0.08f) {
       continue;
     }
-    float dr = r - front;
-    float ring = expf(-(dr * dr) / 0.65f);
-    float mag = amp * ring * dt * 7.5f;
+    // Follow the surface slope so blobs drift with peaks/troughs,
+    // including when two waves cancel (slope ~ 0) or stack.
+    float slope = circular_wave(r, t, amp).dhdr;
+    float mag = slope * dt * 5.5f;
     b.vx += (dx / r) * mag;
     b.vy += (dy / r) * mag;
   }

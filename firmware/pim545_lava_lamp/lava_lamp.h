@@ -14,7 +14,7 @@ class LavaLamp {
   void reseed(uint32_t seed);
   void step(float dt);
   void impulse(float x, float y, float strength);
-  void wave_force(float ox, float oy, float front, float amp, float dt);
+  void wave_force(float ox, float oy, float t, float amp, float dt);
   void render_rgb(uint8_t *rgb) const;
   void render_luma(uint8_t *luma) const;
 
