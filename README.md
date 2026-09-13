@@ -1,10 +1,13 @@
 # ESP32 PIM545 Lava Lamp
 
-A lava-lamp for a [Pimoroni Pico Scroll Pack (PIM545)](https://shop.pimoroni.com/products/pico-scroll-pack): **119 white LEDs in a 17×7 grid**, driven over I2C by an **ESP32** you plug into a Mac with USB-C.
+One repo for both canvases:
 
-The physics are the same heat-driven blobs as [green-building-lava-lamp](https://github.com/Rhoahndur/green-building-lava-lamp) (MIT Green Building, 17×9 RGB windows). This canvas is **7 wide × 17 tall** — hold the Scroll Pack like a building, buttons A/B at the roof.
+- **PIM545 pack** — 7×17 white LEDs on an ESP32 (`firmware/`, `lava_lamp.py`)
+- **Green Building sim** — 9×17 RGB windows (`building.py`)
 
-The LEDs are white, so colour is folded down to brightness. Hot blobs still rise, cool blobs sink, they merge, split, and glow into each other.
+Tap a corner on the pack; the same pebble runs on the LEDs and, if `building.py --controller` is running, on the [simulator](https://sundai.willsarg.com).
+
+The pack is a [Pimoroni Pico Scroll Pack (PIM545)](https://shop.pimoroni.com/products/pico-scroll-pack). Hold it like a building, A/B at the roof. White LEDs show luminance; the sim is in color.
 
 ![One 7×17 frame, nearest-neighbor scaled](assets/preview.png)
 
@@ -141,19 +144,22 @@ List ports with `ls /dev/cu.usb*`. Host frames win until USB goes quiet for 2.5 
 
 Packet (124 bytes): `0x50 0x53 0x07 0x11` + 119 luminance bytes (row-major, origin top-left) + XOR of the previous 123 bytes.
 
-## Mirror pebbles onto the Green Building sim
+## Green Building sim (9×17 color)
 
-The firmware prints `PEBBLE A` / `B` / `X` / `Y` when you tap a corner. The [green-building-lava-lamp](https://github.com/Rhoahndur/green-building-lava-lamp) client listens for those lines and drops the same wave on the 9×17 facade.
-
-USB-C stays in the ESP32 (power + serial). In a second terminal:
+`building.py` is the old green-building-lava-lamp client, in this repo. It POSTs 459-byte RGB frames to the simulator. The pack keeps drawing locally; this process only listens for `PEBBLE A/B/X/Y` on USB.
 
 ```sh
-cd ../green-building-lava-lamp
 python3 -m pip install pyserial
-python3 lava_lamp.py YOUR-INSTANCE --controller
+python3 building.py crisp-owl --controller
 ```
 
-The pack keeps running its own 7×17 lava. The Mac only forwards taps; it does not replace the on-device picture.
+Watch: https://sundai.willsarg.com/crisp-owl?view=close
+
+Same flags as before (`--fps`, `--seed`, `--preview`, `--dry-run`, `--base-url`). Pass `--controller /dev/cu.usbserial-0001` if auto-detect is wrong. Only one sender per instance.
+
+![Building still](assets/building/preview.png)
+
+![Building strip](assets/building/preview-strip.png)
 
 ## How the blobs work
 
