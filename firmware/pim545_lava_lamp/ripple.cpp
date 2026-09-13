@@ -117,18 +117,17 @@ void Ripples::apply(uint8_t *luma) const {
   }
   for (int y = 0; y < LAMP_HEIGHT; y++) {
     for (int x = 0; x < LAMP_WIDTH; x++) {
-      float h = height_at((float)x, (float)y);
-      if (h > (16.0f / 10.0f)) {
-        h = 16.0f / 10.0f;
-      } else if (h < -(16.0f / 10.0f)) {
-        h = -(16.0f / 10.0f);
+      int add = (int)lroundf(height_at((float)x, (float)y) * 230.0f);
+      if (add > 368) {
+        add = 368;
+      } else if (add < -368) {
+        add = -368;
       }
-      if (h == 0.0f) {
+      if (add == 0) {
         continue;
       }
       int i = y * LAMP_WIDTH + x;
-      // Crests add light, troughs dim, lava shape stays underneath.
-      int v = (int)luma[i] + (int)lroundf(h * 230.0f);
+      int v = (int)luma[i] + add;
       if (v < 0) {
         v = 0;
       }
@@ -146,16 +145,15 @@ void Ripples::apply_rgb(uint8_t *rgb) const {
   }
   for (int y = 0; y < LAMP_HEIGHT; y++) {
     for (int x = 0; x < LAMP_WIDTH; x++) {
-      float h = height_at((float)x, (float)y);
-      if (h > (16.0f / 10.0f)) {
-        h = 16.0f / 10.0f;
-      } else if (h < -(16.0f / 10.0f)) {
-        h = -(16.0f / 10.0f);
+      int add = (int)lroundf(height_at((float)x, (float)y) * 230.0f);
+      if (add > 368) {
+        add = 368;
+      } else if (add < -368) {
+        add = -368;
       }
-      if (h == 0.0f) {
+      if (add == 0) {
         continue;
       }
-      int add = (int)lroundf(h * 230.0f);
       int i = (y * LAMP_WIDTH + x) * 3;
       for (int c = 0; c < 3; c++) {
         int v = (int)rgb[i + c] + add;
