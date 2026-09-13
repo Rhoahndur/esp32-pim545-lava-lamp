@@ -302,10 +302,11 @@ def render_frame(blobs: list[Blob]) -> bytes:
 
 # PIM545 corner buttons mapped onto this 9x17 facade (A/B roof, X/Y ground).
 CORNERS = {
-    "B": (WIDTH - 1.2, 0.3),
-    "A": (0.3, 0.3),
-    "Y": (WIDTH - 1.2, HEIGHT - 1.2),
-    "X": (0.3, HEIGHT - 1.2),
+    # Device is already correct; the 9x17 facade is mirrored vs the pack.
+    "B": (0.3, 0.3),
+    "A": (WIDTH - 1.2, 0.3),
+    "Y": (0.3, HEIGHT - 1.2),
+    "X": (WIDTH - 1.2, HEIGHT - 1.2),
 }
 
 WAVE_C = 10.0
