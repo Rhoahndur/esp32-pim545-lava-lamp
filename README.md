@@ -141,6 +141,20 @@ List ports with `ls /dev/cu.usb*`. Host frames win until USB goes quiet for 2.5 
 
 Packet (124 bytes): `0x50 0x53 0x07 0x11` + 119 luminance bytes (row-major, origin top-left) + XOR of the previous 123 bytes.
 
+## Mirror pebbles onto the Green Building sim
+
+The firmware prints `PEBBLE A` / `B` / `X` / `Y` when you tap a corner. The [green-building-lava-lamp](https://github.com/Rhoahndur/green-building-lava-lamp) client listens for those lines and drops the same wave on the 9×17 facade.
+
+USB-C stays in the ESP32 (power + serial). In a second terminal:
+
+```sh
+cd ../green-building-lava-lamp
+python3 -m pip install pyserial
+python3 lava_lamp.py YOUR-INSTANCE --controller
+```
+
+The pack keeps running its own 7×17 lava. The Mac only forwards taps; it does not replace the on-device picture.
+
 ## How the blobs work
 
 Same knobs as the Green Building lamp. y increases downward; the ground floor is hot.

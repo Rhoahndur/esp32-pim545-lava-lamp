@@ -331,12 +331,12 @@ void LavaLamp::impulse(float x, float y, float strength) {
     float dy = b.y - y;
     float dist = hypotf(dx, dy) + 0.18f;
     float mag = strength / (dist * dist);
-    if (mag > 2.4f) {
-      mag = 2.4f;
+    if (mag > 3.2f) {
+      mag = 3.2f;
     }
     b.vx += (dx / dist) * mag;
     b.vy += (dy / dist) * mag;
-    b.temp = clampf(b.temp + 0.06f * mag, 0.0f, 1.0f);
+    b.temp = clampf(b.temp + 0.08f * mag, 0.0f, 1.0f);
   }
 }
 
@@ -348,10 +348,10 @@ void LavaLamp::wave_force(float ox, float oy, float t, float amp, float dt) {
     if (r < 0.08f) {
       continue;
     }
-    // Follow the surface slope so blobs drift with peaks/troughs,
-    // including when two waves cancel (slope ~ 0) or stack.
-    float slope = circular_wave(r, t, amp).dhdr;
-    float mag = slope * dt * 5.5f;
+    // Crest (h > 0) shoves blobs outward; trough pulls them in.
+    // Two crests stacking → bigger kick; crest vs trough → they cancel.
+    float h = circular_wave(r, t, amp).h;
+    float mag = h * dt * 16.0f;
     b.vx += (dx / r) * mag;
     b.vy += (dy / r) * mag;
   }

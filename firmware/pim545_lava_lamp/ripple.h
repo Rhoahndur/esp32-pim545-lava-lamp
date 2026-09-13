@@ -20,7 +20,7 @@ class Ripples {
   bool active() const;
 
  private:
-  static const int MAX = 8;
+  static const int MAX = 4;
   static const float MAX_AGE;
 
   struct Drop {
