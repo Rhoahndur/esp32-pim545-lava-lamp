@@ -29,10 +29,10 @@ struct CornerBtn {
 };
 
 static CornerBtn corners[] = {
-    {PIN_BTN_B, 0.2f, 0.2f, "B", false, 0},
-    {PIN_BTN_A, (float)LAMP_WIDTH - 1.2f, 0.2f, "A", false, 0},
-    {PIN_BTN_Y, 0.2f, (float)LAMP_HEIGHT - 1.2f, "Y", false, 0},
-    {PIN_BTN_X, (float)LAMP_WIDTH - 1.2f, (float)LAMP_HEIGHT - 1.2f, "X", false, 0},
+    {PIN_BTN_B, (float)LAMP_WIDTH - 1.2f, 0.2f, "B", false, 0},
+    {PIN_BTN_A, 0.2f, 0.2f, "A", false, 0},
+    {PIN_BTN_Y, (float)LAMP_WIDTH - 1.2f, (float)LAMP_HEIGHT - 1.2f, "Y", false, 0},
+    {PIN_BTN_X, 0.2f, (float)LAMP_HEIGHT - 1.2f, "X", false, 0},
 };
 
 static const uint8_t PKT_MAGIC0 = 0x50;  // 'P'
@@ -63,8 +63,8 @@ static void print_help() {
   Serial.println(F("PIM545 lava lamp  7x17 white LEDs  IS31FL3731 @ 0x74"));
   Serial.printf("I2C  SDA=GPIO%d  SCL=GPIO%d  3.3V -> VSYS  GND -> GND\n", PIN_SDA, PIN_SCL);
   Serial.println(F("buttons (optional, active-low): tap a corner to drop a pebble"));
-  Serial.printf("  B=GPIO%d top-left   A=GPIO%d top-right\n", PIN_BTN_B, PIN_BTN_A);
-  Serial.printf("  Y=GPIO%d bot-left   X=GPIO%d bot-right\n", PIN_BTN_Y, PIN_BTN_X);
+  Serial.printf("  A=GPIO%d top-left   B=GPIO%d top-right\n", PIN_BTN_A, PIN_BTN_B);
+  Serial.printf("  X=GPIO%d bot-left   Y=GPIO%d bot-right\n", PIN_BTN_X, PIN_BTN_Y);
   Serial.println(F("serial: a/b/x/y pebble  t=test  l=lava  p=pause  s=reseed  +/-=brightness"));
   Serial.println(F("host frames: 0x50 0x53 0x07 0x11 + 119 luma bytes + xor"));
   Serial.println();
