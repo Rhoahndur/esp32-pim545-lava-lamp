@@ -17,6 +17,7 @@ class Ripples {
   void drop(float x, float y, float amp = 1.0f);
   void step(float dt, LavaLamp *lamp, bool move_blobs);
   void apply(uint8_t *luma) const;
+  void apply_rgb(uint8_t *rgb) const;
   bool active() const;
 
  private:

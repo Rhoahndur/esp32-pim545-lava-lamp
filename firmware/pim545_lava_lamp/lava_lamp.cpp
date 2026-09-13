@@ -37,7 +37,11 @@ const float SAT_BASE = 0.82f;
 const float SAT_TEMP = 0.18f;
 const float VAL_BASE = 0.65f;
 const float VAL_TEMP = 0.35f;
-const float Y_ASPECT = 1.0f;
+#ifdef LAVA_TOUCHSCREEN
+const float Y_ASPECT = 0.85f;  // match Green Building window aspect
+#else
+const float Y_ASPECT = 1.0f;   // square PIM545 pixels
+#endif
 const float GAUSS_FALLOFF = 2.5f;
 const float GLOW_GAMMA = 1.35f;
 const float TAU = 6.283185307179586f;

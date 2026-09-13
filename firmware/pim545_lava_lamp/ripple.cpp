@@ -118,10 +118,10 @@ void Ripples::apply(uint8_t *luma) const {
   for (int y = 0; y < LAMP_HEIGHT; y++) {
     for (int x = 0; x < LAMP_WIDTH; x++) {
       float h = height_at((float)x, (float)y);
-      if (h > 1.6f) {
-        h = 1.6f;
-      } else if (h < -1.6f) {
-        h = -1.6f;
+      if (h > (16.0f / 10.0f)) {
+        h = 16.0f / 10.0f;
+      } else if (h < -(16.0f / 10.0f)) {
+        h = -(16.0f / 10.0f);
       }
       if (h == 0.0f) {
         continue;
@@ -136,6 +136,37 @@ void Ripples::apply(uint8_t *luma) const {
         v = 255;
       }
       luma[i] = (uint8_t)v;
+    }
+  }
+}
+
+void Ripples::apply_rgb(uint8_t *rgb) const {
+  if (!active()) {
+    return;
+  }
+  for (int y = 0; y < LAMP_HEIGHT; y++) {
+    for (int x = 0; x < LAMP_WIDTH; x++) {
+      float h = height_at((float)x, (float)y);
+      if (h > (16.0f / 10.0f)) {
+        h = 16.0f / 10.0f;
+      } else if (h < -(16.0f / 10.0f)) {
+        h = -(16.0f / 10.0f);
+      }
+      if (h == 0.0f) {
+        continue;
+      }
+      int add = (int)lroundf(h * 230.0f);
+      int i = (y * LAMP_WIDTH + x) * 3;
+      for (int c = 0; c < 3; c++) {
+        int v = (int)rgb[i + c] + add;
+        if (v < 0) {
+          v = 0;
+        }
+        if (v > 255) {
+          v = 255;
+        }
+        rgb[i + c] = (uint8_t)v;
+      }
     }
   }
 }

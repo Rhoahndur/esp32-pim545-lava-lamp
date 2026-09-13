@@ -1,3 +1,2 @@
-// Share the existing firmware simulation; only the canvas width changes.
-#include "../pim545_lava_lamp/lava_lamp.cpp"
-#include "../pim545_lava_lamp/ripple.cpp"
+// lava_lamp.cpp and ripple.cpp are compiled as their own translation units
+// (see platformio-touch.ini build_src_filter).
