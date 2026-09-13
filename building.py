@@ -570,7 +570,7 @@ def build_parser() -> argparse.ArgumentParser:
         nargs="?",
         const="auto",
         metavar="PORT",
-        help="Read pebble taps from a PIM545 ESP32 (USB serial). "
+        help="Read pebble taps from a PIM545 or Waveshare touchscreen (USB serial). "
         "Pass a device such as /dev/cu.usbserial-0001, or omit the path to auto-detect",
     )
     parser.add_argument(
@@ -625,20 +625,55 @@ def open_controller(port: str, baud: int):
         if not candidates:
             names = ", ".join(p.device for p in ports) or "(none)"
             raise OSError(f"No USB serial device found. Ports: {names}")
-        if len(candidates) > 1:
-            raise SystemExit("Multiple USB ports: " + ", ".join(candidates) + "; select one with --controller PORT")
-        port = candidates[0]
-        print(f"Controller on {port}", flush=True)
+        recognized = []
+        for candidate in candidates:
+            try:
+                device = open_controller(candidate, baud)
+                if getattr(device, "lava_device", None):
+                    recognized.append(device)
+                else:
+                    device.close()
+            except (OSError, ValueError) as error:
+                print(f"Skipping {candidate}: {error}", flush=True)
+        if len(recognized) == 1:
+            return recognized[0]
+        names = ", ".join(device.port for device in recognized)
+        for device in recognized:
+            device.close()
+        if names:
+            raise SystemExit(f"Multiple lava controllers: {names}; select one with --controller PORT")
+        raise OSError("No controller handshake received. Flash current firmware, use USB-to-UART, or select a legacy device with --controller PORT.")
     ser = serial.Serial()
     ser.port = port
     ser.baudrate = baud
     ser.timeout = 0
+    ser.write_timeout = 1
     ser.dtr = False
     ser.rts = False
     try:
         ser.open()
         time.sleep(0.3)
         ser.reset_input_buffer()
+        ser.write(b"?\n")
+        deadline = time.monotonic() + 2
+        pending = bytearray()
+        ser.lava_device = None
+        while time.monotonic() < deadline:
+            pending.extend(ser.read(256))
+            while b"\n" in pending:
+                line, _, rest = pending.partition(b"\n")
+                pending = bytearray(rest)
+                parts = line.decode("ascii", errors="replace").strip().split()
+                if (len(parts) == 4 and parts[:2] == ["LAVA_CONTROLLER", "1"]
+                        and parts[2] in ("PIM545", "WAVESHARE_TOUCH_7")
+                        and parts[3] == "corners"):
+                    ser.lava_device = parts[2]
+                    print(f"Controller {ser.lava_device} on {port}", flush=True)
+                    return ser
+            if len(pending) > 4096:
+                pending.clear()
+            time.sleep(0.02)
+        print(f"No device identity on {port}; legacy PEBBLE events only.", flush=True)
     except Exception:
         ser.close()
         raise
@@ -661,6 +696,8 @@ def poll_pebbles(ser, buf: bytearray) -> list[str]:
         del buf[: nl + 1]
         if line in ("PEBBLE A", "PEBBLE B", "PEBBLE X", "PEBBLE Y"):
             events.append(line[7].upper())
+        elif line.startswith(("ERROR:", "LAVA_CONTROLLER ")):
+            print(f"Controller: {line}", flush=True)
     if len(buf) > 4096:
         print("Controller log exceeded 4096 bytes without a newline; discarding it. Check --baud.", flush=True)
         buf.clear()
@@ -726,7 +763,7 @@ def main(argv: list[str] | None = None) -> None:
                             serial_buf.clear()
                             print("controller reconnected", flush=True)
                         except Exception as error:
-                            print(f"waiting for PIM545 serial: {error}", flush=True)
+                            print(f"waiting for lava controller: {error}", flush=True)
                 else:
                     try:
                         events = poll_pebbles(controller, serial_buf)

@@ -76,7 +76,11 @@ static const uint8_t PIM545_I2C_ADDR = 0x74;
 static const uint32_t I2C_HZ = 400000;
 
 // Lamp canvas: Green Building analog, 7 windows by 17 floors.
+#ifdef LAVA_TOUCHSCREEN
+static const int LAMP_WIDTH = 9;
+#else
 static const int LAMP_WIDTH = 7;
+#endif
 static const int LAMP_HEIGHT = 17;
 static const int LAMP_PIXELS = LAMP_WIDTH * LAMP_HEIGHT;
 

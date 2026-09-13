@@ -60,6 +60,7 @@ static void scan_i2c() {
 }
 
 static void print_help() {
+  Serial.println(F("LAVA_CONTROLLER 1 PIM545 corners"));
   Serial.println();
   Serial.println(F("PIM545 lava lamp  7x17 white LEDs  IS31FL3731 @ 0x74"));
   Serial.printf("I2C  SDA=GPIO%d  SCL=GPIO%d  3.3V -> VSYS  GND -> GND\n", PIN_SDA, PIN_SCL);

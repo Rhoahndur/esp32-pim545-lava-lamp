@@ -4,6 +4,7 @@ One repo for both canvases:
 
 - **PIM545 pack** — 7×17 white LEDs on an ESP32 (`firmware/`, `lava_lamp.py`)
 - **Green Building sim** — 9×17 RGB windows (`building.py`)
+- **Waveshare ESP32-S3-Touch-LCD-7 rev 1.2** — color preview and four touch buttons (`firmware/touchscreen/`)
 
 Tap a corner on the pack; the same button event runs on the LEDs and, if `building.py crisp-owl --controller` is running, on the [simulator](https://sundai.willsarg.com). The two simulations run independently; their blob positions are not synchronized.
 
@@ -172,6 +173,43 @@ python3 building.py crisp-owl --controller
 ```
 
 Watch: https://sundai.willsarg.com/crisp-owl?view=close
+
+## Waveshare 7-inch touchscreen controller
+
+For **ESP32-S3-Touch-LCD-7 rev 1.2** (not the 7B), use the separate target below.
+It uses the board's 800×480 RGB LCD, GT911 touch and CH422G expander through a
+pinned LovyanGFX board driver. No PIM545 or jumper wiring is needed.
+
+```sh
+cd firmware
+pio run -c platformio-touch.ini
+pio run -c platformio-touch.ini -t upload --upload-port /dev/cu.YOUR_PORT
+cd ..
+python3 building.py crisp-owl --controller
+```
+
+Connect the Mac to the board's **USB-to-UART** connector; this build uses UART0,
+not native USB CDC. Use `pio device list` to find the port. The touchscreen shows
+its own lamp and buttons A/B at the top, X/Y at the bottom. Each press sends one
+corner event until released. Its animation also works without the Mac; streaming
+to the hosted simulator still requires `building.py`. The two views share taps,
+not identical animation frames.
+
+The bridge sends `?\n` and recognizes
+`LAVA_CONTROLLER 1 PIM545 corners` or
+`LAVA_CONTROLLER 1 WAVESHARE_TOUCH_7 corners`. Reflash existing PIM545 firmware
+for automatic recognition. Older firmware remains usable with an explicit
+`--controller PORT`. If both controllers are connected, select one explicitly.
+Auto-discovery queries candidate USB serial ports; it does not flash them.
+
+If the screen stays blank, inspect the 115200-baud serial log for LCD/PSRAM
+errors and confirm the exact board and USB power. This target requires OPI PSRAM.
+Close Serial Monitor before running the bridge.
+
+References: [Waveshare board documentation](https://www.waveshare.com/wiki/ESP32-S3-Touch-LCD-7)
+and [display driver](https://github.com/lovyan03/LovyanGFX/blob/45dc36beb61f67dfd33a19954a1227acb02cad25/src/lgfx_user/LGFX_Waveshare_ESP32S3_Touch_LCD_7.h).
+
+### Building client options
 
 Same flags as before (`--fps`, `--seed`, `--preview`, `--dry-run`, `--base-url`). Pass `--controller /dev/cu.usbserial-0001` if auto-detect is wrong. Only one sender per instance.
 
