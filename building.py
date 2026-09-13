@@ -586,6 +586,8 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     args = parser.parse_args(argv)
     if args.frames is not None and args.frames < 0:
         parser.error("--frames must be nonnegative")
+    if args.baud <= 0:
+        parser.error("--baud must be positive")
     local_only = bool(args.dry_run or args.preview or args.dump_ppm or args.dump_png)
     if args.controller and not args.instance and not local_only:
         parser.error("instance is required with --controller unless using --preview or --dry-run")
@@ -621,7 +623,9 @@ def open_controller(port: str, baud: int):
         ]
         if not candidates:
             names = ", ".join(p.device for p in ports) or "(none)"
-            raise SystemExit(f"No USB serial device found. Ports: {names}")
+            raise OSError(f"No USB serial device found. Ports: {names}")
+        if len(candidates) > 1:
+            raise SystemExit("Multiple USB ports: " + ", ".join(candidates) + "; select one with --controller PORT")
         port = candidates[0]
         print(f"Controller on {port}", flush=True)
     ser = serial.Serial()
@@ -630,9 +634,13 @@ def open_controller(port: str, baud: int):
     ser.timeout = 0
     ser.dtr = False
     ser.rts = False
-    ser.open()
-    time.sleep(0.3)
-    ser.reset_input_buffer()
+    try:
+        ser.open()
+        time.sleep(0.3)
+        ser.reset_input_buffer()
+    except Exception:
+        ser.close()
+        raise
     return ser
 
 
@@ -650,8 +658,11 @@ def poll_pebbles(ser, buf: bytearray) -> list[str]:
             break
         line = bytes(buf[:nl]).decode("ascii", errors="replace").strip()
         del buf[: nl + 1]
-        if line.startswith("PEBBLE ") and len(line) > 7:
+        if line in ("PEBBLE A", "PEBBLE B", "PEBBLE X", "PEBBLE Y"):
             events.append(line[7].upper())
+    if len(buf) > 4096:
+        print("Controller log exceeded 4096 bytes without a newline; discarding it. Check --baud.", flush=True)
+        buf.clear()
     return events
 
 
@@ -702,9 +713,6 @@ def main(argv: list[str] | None = None) -> None:
     serial_buf = bytearray()
     last_reconnect = 0.0
     try:
-        if args.controller:
-            controller = open_controller(args.controller, args.baud)
-            print("Listening for PIM545 corner taps (PEBBLE A/B/X/Y)", flush=True)
         while True:
             loop_started = time.monotonic()
             if args.controller:

@@ -68,9 +68,8 @@ bool PicoScroll::begin(TwoWire *wire) {
   }
 
   clear();
-  show();
-  found_ = true;
-  return true;
+  found_ = show();
+  return found_;
 }
 
 void PicoScroll::clear() { memset(pwm_, 0, sizeof(pwm_)); }
@@ -139,9 +138,11 @@ void PicoScroll::fill_lamp(const uint8_t *luma, int count, uint8_t brightness) {
   }
 }
 
-void PicoScroll::show() {
+bool PicoScroll::show() {
   if (!select_bank(draw_frame_)) {
-    return;
+    found_ = false;
+    Serial.println(F("PIM545 I2C bank select failed; retrying initialization."));
+    return false;
   }
   // Wire buffer on ESP32 is 128 bytes; send PWM in 24-byte chunks.
   for (int offset = 0; offset < PWM_BYTES; offset += 24) {
@@ -150,11 +151,18 @@ void PicoScroll::show() {
       chunk = 24;
     }
     if (!write_block(COLOR_OFFSET + offset, pwm_ + offset, chunk)) {
-      return;
+      found_ = false;
+      Serial.println(F("PIM545 I2C frame write failed; check power/SDA/SCL."));
+      return false;
     }
   }
-  write_reg(CONFIG_BANK, REG_FRAME, draw_frame_);
+  if (!write_reg(CONFIG_BANK, REG_FRAME, draw_frame_)) {
+    found_ = false;
+    Serial.println(F("PIM545 I2C frame switch failed; retrying initialization."));
+    return false;
+  }
   draw_frame_ = draw_frame_ ? 0 : 1;
+  return true;
 }
 
 void PicoScroll::test_pattern(uint32_t now_ms) {

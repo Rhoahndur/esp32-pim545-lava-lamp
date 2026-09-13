@@ -17,7 +17,7 @@ class PicoScroll {
   void set_native(int x, int y, uint8_t pwm);
   void set_lamp(int x, int y, uint8_t luma);
   void fill_lamp(const uint8_t *luma, int count, uint8_t brightness);
-  void show();
+  bool show();
 
   void test_pattern(uint32_t now_ms);
 

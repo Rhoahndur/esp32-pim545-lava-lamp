@@ -480,6 +480,12 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     args = parser.parse_args(argv)
     if args.frames is not None and args.frames < 0:
         parser.error("--frames must be nonnegative")
+    if args.baud <= 0:
+        parser.error("--baud must be positive")
+    if args.dry_run and args.serial:
+        parser.error("--dry-run cannot be combined with --serial")
+    if args.dump_strip and args.frames == 0:
+        parser.error("--dump-strip requires a finite --frames count")
     streaming = bool(args.serial)
     local_only = bool(args.dry_run or args.preview or args.dump_ppm or args.dump_png or args.dump_strip)
     if not streaming and not local_only:
@@ -509,9 +515,14 @@ def open_serial(port: str, baud: int):
         if not candidates:
             names = ", ".join(p.device for p in ports) or "(none)"
             raise SystemExit(f"No USB serial device found. Ports: {names}")
+        if len(candidates) > 1:
+            raise SystemExit("Multiple USB ports: " + ", ".join(candidates) + "; select one with --serial PORT")
         port = candidates[0]
         print(f"Using {port}", flush=True)
-    return serial.Serial(port, baud, timeout=0.1)
+    try:
+        return serial.Serial(port, baud, timeout=0.1, write_timeout=2)
+    except (OSError, ValueError) as error:
+        raise SystemExit(f"Cannot open serial port {port}: {error}. Close other serial clients and check the cable/port.") from error
 
 
 def main(argv: list[str] | None = None) -> None:
@@ -525,8 +536,6 @@ def main(argv: list[str] | None = None) -> None:
     streaming = args._streaming
     if args.serial:
         ser = open_serial(args.serial, args.baud)
-        time.sleep(0.4)
-        ser.reset_input_buffer()
         print(f"Streaming 7x17 luma frames to {ser.port} at {args.fps} fps", flush=True)
     elif args.dry_run or args.preview or args.dump_ppm or args.dump_png or args.dump_strip:
         print("Generating locally" + (" (preview on stderr)" if args.preview else ""), flush=True)
@@ -535,6 +544,9 @@ def main(argv: list[str] | None = None) -> None:
     last_report = started_run
     cursor_hidden = False
     try:
+        if ser is not None:
+            time.sleep(0.4)
+            ser.reset_input_buffer()
         for pixels in frames(args.fps, args.seed):
             loop_started = time.monotonic()
             if len(pixels) != FRAME_BYTES:
@@ -558,7 +570,14 @@ def main(argv: list[str] | None = None) -> None:
                 )
                 sys.stderr.flush()
             if ser is not None:
-                ser.write(pack_frame(rgb_to_luma(pixels)))
+                packet = pack_frame(rgb_to_luma(pixels))
+                if ser.write(packet) != len(packet):
+                    raise OSError("Incomplete USB frame write")
+                # Drain firmware diagnostics so its serial output cannot back up.
+                if ser.in_waiting:
+                    message = ser.read(min(ser.in_waiting, 4096)).decode(errors="replace").strip()
+                    if message:
+                        print(f"ESP32: {message}", file=sys.stderr)
                 time.sleep(max(0, 1 / args.fps - (time.monotonic() - loop_started)))
             elif args.preview:
                 time.sleep(max(0, 1 / args.fps - (time.monotonic() - loop_started)))
@@ -573,6 +592,8 @@ def main(argv: list[str] | None = None) -> None:
                 break
     except KeyboardInterrupt:
         print("\nStopped.")
+    except OSError as error:
+        raise SystemExit(f"Output failed: {error}. Check the USB connection/port or output path, then restart.") from error
     finally:
         if cursor_hidden:
             sys.stderr.write("\x1b[?25h")

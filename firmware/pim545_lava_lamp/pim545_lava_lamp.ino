@@ -41,6 +41,7 @@ static const int PKT_LEN = 4 + LAMP_PIXELS + 1;
 
 static uint8_t pkt[PKT_LEN];
 static int pkt_n = 0;
+static uint32_t last_byte_ms = 0;
 
 static void scan_i2c() {
   Serial.println(F("I2C scan:"));
@@ -111,7 +112,9 @@ static void handle_packet() {
   mode = MODE_HOST;
   last_host_ms = millis();
   apply_luma();
-  scroll.show();
+  if (scroll.found()) {
+    scroll.show();
+  }
 }
 
 static void feed_serial_byte(uint8_t b) {
@@ -219,13 +222,18 @@ void setup() {
   lamp.reseed(millis());
   if (pressed(PIN_BTN_A)) {
     mode = MODE_TEST;
-    Serial.println(F("boot: test pattern (release A for lava, or send l)"));
+    Serial.println(F("boot: test pattern (send l for lava)"));
   }
   last_frame_ms = millis();
 }
 
 void loop() {
+  if (pkt_n && millis() - last_byte_ms > 250) {
+    pkt_n = 0;
+    Serial.println(F("partial host packet timed out; parser reset"));
+  }
   while (Serial.available()) {
+    last_byte_ms = millis();
     feed_serial_byte((uint8_t)Serial.read());
   }
   handle_buttons();
