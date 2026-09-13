@@ -27,18 +27,21 @@ static void drop(const Button &b) {
 }
 
 void setup() {
-  // Use the board's USB-to-UART connector; no native-USB mux changes.
+  // UART Type-C (CH343). Do not enable USB CDC; that mux fights this port.
   Serial.begin(115200);
-  delay(400);
+  delay(200);
+  Serial.println("boot");
   identify();
   if (!psramFound()) {
     Serial.println("ERROR: PSRAM missing; use waveshare-touch-7 build with OPI PSRAM.");
     return;
   }
+  Serial.printf("PSRAM %u bytes\n", ESP.getPsramSize());
   if (!display.init()) {
     Serial.println("ERROR: LCD initialization failed; check board model and power.");
     return;
   }
+  display.setBrightness(255);
   display.setRotation(0);
   display.fillScreen(0x0821);
   display.setTextColor(0xFFFF);
