@@ -11,7 +11,7 @@ const float kPi = 3.14159265f;
 const float kC = 10.0f;          // ring speed, pixels / s
 const float kLambda = 5.4f;      // bright ring, then a trough inside it
 const float kK = 2.0f * kPi / kLambda;
-const float kSigma = 1.40f;      // packet width: ~one crest + one trough
+const float kSigma = 1.15f;      // tight packet so a new drop does not sit on the last ring
 const float kGamma = 0.32f;      // lives long enough to cross the board
 const float kR0 = 1.35f;         // mild 1/√r so the ring stays visible
 
@@ -46,18 +46,22 @@ WaveAmp circular_wave(float r, float t, float amp) {
 }
 
 void Ripples::drop(float x, float y, float amp) {
-  int slot = 0;
-  float oldest = -1.0f;
+  // Always add a new ring. Never rewind an existing one.
+  int slot = -1;
+  int oldest_i = 0;
+  float oldest_t = -1.0f;
   for (int i = 0; i < MAX; i++) {
     if (!drops_[i].live) {
       slot = i;
-      oldest = 1e9f;
       break;
     }
-    if (drops_[i].t > oldest) {
-      oldest = drops_[i].t;
-      slot = i;
+    if (drops_[i].t > oldest_t) {
+      oldest_t = drops_[i].t;
+      oldest_i = i;
     }
+  }
+  if (slot < 0) {
+    slot = oldest_i;
   }
   drops_[slot].live = true;
   drops_[slot].x = x;

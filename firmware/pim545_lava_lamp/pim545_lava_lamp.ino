@@ -180,7 +180,7 @@ static void handle_buttons() {
     if (down == c.was_pressed) {
       continue;
     }
-    if (now - c.last_edge_ms < 40) {
+    if (now - c.last_edge_ms < 70) {
       continue;
     }
     c.last_edge_ms = now;
