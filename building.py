@@ -14,6 +14,7 @@ import colorsys
 import http.client
 import math
 import random
+import re
 import struct
 import sys
 import time
@@ -73,6 +74,19 @@ USER_AGENT = "esp32-pim545-lava-lamp/building"
 PROGRESS_EVERY = 2.0
 DEFAULT_BASE_URL = "https://sundai.willsarg.com"
 INSTANCE_CHARS = "abcdefghijklmnopqrstuvwxyz0123456789-"
+
+# The touchscreen build interleaves 464-byte binary frames with its log lines,
+# so neither the identity banner nor a PEBBLE event reliably starts a
+# newline-delimited line. Match the markers wherever they land in the stream.
+FRAME_MAGIC = bytes((0xAA, 0x55, WIDTH, HEIGHT))
+IDENT_RE = re.compile(rb"LAVA_CONTROLLER\s+1\s+(PIM545|WAVESHARE_TOUCH_7)\s+corners")
+PEBBLE_RE = re.compile(rb"PEBBLE ([ABXYabxy])(?![0-9A-Za-z])")
+LOG_PREFIXES = ("TOUCH ", "I2C:", "GT911", "ERROR", "boot", "PSRAM ")
+
+# How long to keep waiting for the next controller frame before deciding the
+# device went quiet and driving the facade from the local lamp again. The
+# touchscreen emits one frame per 100 ms.
+DEVICE_FRAME_GRACE = 1.5
 
 EPILOG = """
 Frame protocol:
@@ -629,7 +643,9 @@ def open_controller(port: str, baud: int):
         for candidate in candidates:
             try:
                 device = open_controller(candidate, baud)
-                if getattr(device, "lava_device", None):
+                # A port streaming well-formed 9x17 frames is a lava controller
+                # even if its identity banner never made it through intact.
+                if getattr(device, "lava_device", None) or getattr(device, "streams_frames", False):
                     recognized.append(device)
                 else:
                     device.close()
@@ -655,53 +671,92 @@ def open_controller(port: str, baud: int):
         time.sleep(0.3)
         ser.reset_input_buffer()
         ser.write(b"?\n")
-        deadline = time.monotonic() + 2
+        deadline = time.monotonic() + 2.5
+        last_ask = time.monotonic()
         pending = bytearray()
         ser.lava_device = None
+        ser.streams_frames = False
         while time.monotonic() < deadline:
-            pending.extend(ser.read(256))
-            while b"\n" in pending:
-                line, _, rest = pending.partition(b"\n")
-                pending = bytearray(rest)
-                parts = line.decode("ascii", errors="replace").strip().split()
-                if (len(parts) == 4 and parts[:2] == ["LAVA_CONTROLLER", "1"]
-                        and parts[2] in ("PIM545", "WAVESHARE_TOUCH_7")
-                        and parts[3] == "corners"):
-                    ser.lava_device = parts[2]
-                    print(f"Controller {ser.lava_device} on {port}", flush=True)
-                    return ser
-            if len(pending) > 4096:
-                pending.clear()
+            pending.extend(ser.read(4096))
+            # Scan the raw bytes: splitting on "\n" would glue the banner to
+            # whatever binary frame bytes preceded it and never match.
+            ident = IDENT_RE.search(pending)
+            if ident:
+                ser.lava_device = ident.group(1).decode("ascii")
+                ser.streams_frames = FRAME_MAGIC in pending
+                print(f"Controller {ser.lava_device} on {port}", flush=True)
+                return ser
+            if len(pending) > 65536:
+                del pending[:-512]  # keep more than one marker's worth of tail
+            now = time.monotonic()
+            if now - last_ask > 0.8:
+                last_ask = now
+                ser.write(b"?\n")
             time.sleep(0.02)
-        print(f"No device identity on {port}; legacy PEBBLE events only.", flush=True)
+        ser.streams_frames = FRAME_MAGIC in pending
+        if ser.streams_frames:
+            print(f"No identity banner on {port}, but it is streaming 9x17 frames.", flush=True)
+        else:
+            print(f"No device identity on {port}; legacy PEBBLE events only.", flush=True)
     except Exception:
         ser.close()
         raise
     return ser
 
 
-def poll_pebbles(ser, buf: bytearray) -> list[str]:
-    """Pull PEBBLE A/B/X/Y events from the ESP32 serial log."""
+def drain_controller(ser, buf: bytearray) -> tuple[list[bytes], list[str]]:
+    """Read RGB frames (AA 55 09 11 ...) and PEBBLE/TOUCH log lines."""
+    frames: list[bytes] = []
+    events: list[str] = []
     if ser is None:
-        return []
-    chunk = ser.read(256)
+        return frames, events
+    chunk = ser.read(2048)
     if chunk:
         buf.extend(chunk)
-    events: list[str] = []
     while True:
+        if len(buf) >= 4 and buf[0] == 0xAA and buf[1] == 0x55:
+            width, height = buf[2], buf[3]
+            if width != WIDTH or height != HEIGHT:
+                del buf[0]
+                continue
+            need = 4 + width * height * 3 + 1
+            if len(buf) < need:
+                break
+            pkt = bytes(buf[:need])
+            chk = 0
+            for byte in pkt[:-1]:
+                chk ^= byte
+            if chk == pkt[-1]:
+                frames.append(pkt[4:-1])
+                del buf[:need]
+            else:
+                del buf[0]
+            continue
         nl = buf.find(b"\n")
-        if nl < 0:
-            break
-        line = bytes(buf[:nl]).decode("ascii", errors="replace").strip()
-        del buf[: nl + 1]
-        if line in ("PEBBLE A", "PEBBLE B", "PEBBLE X", "PEBBLE Y"):
-            events.append(line[7].upper())
-        elif line.startswith(("ERROR:", "LAVA_CONTROLLER ")):
-            print(f"Controller: {line}", flush=True)
-    if len(buf) > 4096:
-        print("Controller log exceeded 4096 bytes without a newline; discarding it. Check --baud.", flush=True)
-        buf.clear()
-    return events
+        magic = buf.find(b"\xaa\x55")
+        if nl >= 0 and (magic < 0 or nl < magic):
+            raw = bytes(buf[:nl])
+            del buf[: nl + 1]
+            # `raw` regularly carries the tail of a binary frame ahead of the
+            # text, so search for the markers instead of anchoring at index 0.
+            for match in PEBBLE_RE.finditer(raw):
+                events.append(match.group(1).decode("ascii").upper())
+            ident = IDENT_RE.search(raw)
+            if ident:
+                ser.lava_device = ident.group(1).decode("ascii")
+                print(f"Controller: {ident.group(0).decode('ascii')}", flush=True)
+                continue
+            line = raw.decode("ascii", errors="replace").strip()
+            if line.startswith(LOG_PREFIXES):
+                print(f"Controller: {line}", flush=True)
+            continue
+        if magic > 0:
+            del buf[:magic]
+            continue
+        if magic < 0 and len(buf) > 1024:
+            del buf[:-64]
+        break
+    return frames, events
 
 
 def _send_frame(conn: http.client.HTTPConnection, path: str, pixels: bytes) -> None:
@@ -750,9 +805,13 @@ def main(argv: list[str] | None = None) -> None:
     controller = None
     serial_buf = bytearray()
     last_reconnect = 0.0
+    forwarding = False
+    awaiting_device = False
+    last_device_frame = 0.0
     try:
         while True:
             loop_started = time.monotonic()
+            device_frames: list[bytes] = []
             if args.controller:
                 if controller is None:
                     now = time.monotonic()
@@ -762,11 +821,18 @@ def main(argv: list[str] | None = None) -> None:
                             controller = open_controller(args.controller, args.baud)
                             serial_buf.clear()
                             print("controller reconnected", flush=True)
+                            # A controller that renders its own facade gets a
+                            # moment to deliver the first frame before the
+                            # local lamp claims the stream.
+                            last_device_frame = now
+                            awaiting_device = bool(getattr(controller, "streams_frames", False))
+                            if awaiting_device:
+                                continue
                         except Exception as error:
                             print(f"waiting for lava controller: {error}", flush=True)
                 else:
                     try:
-                        events = poll_pebbles(controller, serial_buf)
+                        device_frames, events = drain_controller(controller, serial_buf)
                     except Exception as error:
                         print(f"controller lost; will retry: {error}", flush=True)
                         try:
@@ -775,11 +841,39 @@ def main(argv: list[str] | None = None) -> None:
                             pass
                         controller = None
                         serial_buf.clear()
-                        events = []
+                        device_frames, events = [], []
                     for name in events:
-                        if sim.drop_corner(name):
-                            print(f"pebble {name.upper()} -> building", flush=True)
-            pixels = sim.step()
+                        # While the controller renders the facade its own
+                        # ripple is already in the forwarded pixels; replaying
+                        # it here would only stack up in a frozen local sim.
+                        if forwarding or device_frames:
+                            print(f"pebble {name} (controller frame)", flush=True)
+                        elif sim.drop_corner(name):
+                            print(f"pebble {name} -> building", flush=True)
+            # Whenever the controller is streaming its own 9x17 frames, those
+            # are the truth: forward them so the simulator shows the blobs and
+            # ripples that are on the panel. This does not depend on the
+            # identity handshake, only on frames actually arriving.
+            if device_frames:
+                if not forwarding:
+                    forwarding = True
+                    print("Forwarding controller 9x17 frames to the simulator", flush=True)
+                awaiting_device = False
+                last_device_frame = time.monotonic()
+                pixels = device_frames[-1]
+            elif ((forwarding or awaiting_device)
+                    and time.monotonic() - last_device_frame < DEVICE_FRAME_GRACE):
+                # Between device frames. Wait instead of splicing the local
+                # lamp into the stream, which would make the facade flicker
+                # between two unrelated simulations.
+                time.sleep(0.005)
+                continue
+            else:
+                if forwarding:
+                    forwarding = False
+                    print("Controller frames stopped; driving the facade locally", flush=True)
+                awaiting_device = False
+                pixels = sim.step()
             if len(pixels) != FRAME_BYTES:
                 raise RuntimeError(f"expected {FRAME_BYTES}-byte frames, got {len(pixels)}")
             generated += 1
