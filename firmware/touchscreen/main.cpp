@@ -130,11 +130,18 @@ static bool gt911_write_reg(uint8_t addr, uint16_t reg, uint8_t value) {
   return Wire.endTransmission() == 0;
 }
 
+// False only when the panel stops acknowledging on the bus. An idle panel with
+// no finger on it still reports a healthy bus, so this must not be confused
+// with "no touch": re-probing on idle would run forever.
+static bool gt_bus_ok = true;
+
 static bool gt911_read_addr(uint8_t addr, uint16_t *x, uint16_t *y) {
   uint8_t status = 0;
   if (!gt911_read_reg(addr, 0x814E, &status, 1)) {
+    gt_bus_ok = false;
     return false;
   }
+  gt_bus_ok = true;
   if ((status & 0x80) == 0) {
     // No fresh sample. The buffer flag belongs to the GT911 here; leave it.
     return false;
@@ -183,21 +190,15 @@ static void gt911_select_addr() {
 
 static bool gt911_touch(uint16_t *x, uint16_t *y) {
   static uint32_t last_reprobe = 0;
-  static uint32_t last_ok = 0;
   if (gt911_read_addr(gt_addr, x, y)) {
-    last_ok = millis();
     return true;
   }
-  // Only go looking for the other address when the bus has been quiet for a
-  // while; probing on every miss would add two I2C transactions per poll.
+  // Re-probe only when the panel has actually gone off the bus, never just
+  // because nobody is touching it.
   uint32_t now = millis();
-  if (now - last_ok > 3000 && now - last_reprobe > 3000) {
+  if (!gt_bus_ok && now - last_reprobe > 3000) {
     last_reprobe = now;
-    uint8_t before = gt_addr;
     gt911_select_addr();
-    if (gt_addr != before) {
-      last_ok = now;
-    }
   }
   return false;
 }
