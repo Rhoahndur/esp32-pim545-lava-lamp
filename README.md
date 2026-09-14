@@ -190,17 +190,31 @@ python3 building.py crisp-owl --controller
 
 Connect the Mac to the board's **USB-to-UART** connector; this build uses UART0,
 not native USB CDC. Use `pio device list` to find the port. The touchscreen shows
-its own lamp and buttons A/B at the top, X/Y at the bottom. Each press sends one
-corner event until released. Its animation also works without the Mac; streaming
-to the hosted simulator still requires `building.py`. The two views share taps,
-not identical animation frames.
+its own lamp with buttons A/B at the top and X/Y at the bottom; the whole left
+and right margin counts as its corner pair, and a tap inside the grid drops a
+pebble on that window. A tap flashes its button, so you can tell a dead panel
+from a dead bridge at a glance.
+
+Unlike the PIM545 pack, this target renders the 9×17 facade itself and streams
+it: it sends one `AA 55 09 11` + 459-byte RGB + XOR packet per frame, and
+`building.py` forwards those straight to the simulator. **The simulator shows
+the same blobs and ripples as the screen**, not a second independent lamp. If
+the board stops sending for 1.5 s the bridge falls back to its own lamp and says
+so. Its animation still works without the Mac; streaming needs `building.py`.
 
 The bridge sends `?\n` and recognizes
 `LAVA_CONTROLLER 1 PIM545 corners` or
-`LAVA_CONTROLLER 1 WAVESHARE_TOUCH_7 corners`. Reflash existing PIM545 firmware
-for automatic recognition. Older firmware remains usable with an explicit
-`--controller PORT`. If both controllers are connected, select one explicitly.
-Auto-discovery queries candidate USB serial ports; it does not flash them.
+`LAVA_CONTROLLER 1 WAVESHARE_TOUCH_7 corners` anywhere in the stream, since the
+banner is interleaved with binary frames and rarely starts a clean line. A port
+that is emitting valid 9×17 frames is accepted even if its banner never arrives.
+Reflash existing PIM545 firmware for automatic recognition. Older firmware
+remains usable with an explicit `--controller PORT`. If both controllers are
+connected, select one explicitly. Auto-discovery queries candidate USB serial
+ports; it does not flash them.
+
+If a tap lands in the wrong corner, read the `TOUCH x y` line the firmware logs
+for every press and flip one of `TOUCH_SWAP_XY` / `TOUCH_FLIP_X` /
+`TOUCH_FLIP_Y` at the top of `firmware/touchscreen/main.cpp`.
 
 If the screen stays blank, inspect the 115200-baud serial log for LCD/PSRAM
 errors and confirm the exact board and USB power. This target requires OPI PSRAM.
